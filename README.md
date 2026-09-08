@@ -191,10 +191,18 @@ installed hook script, the `settings.json` hook entries and the Claude skill
 files, so they match the binary you are actually running -- that repair is why
 `update` is worth running even when there is nothing to download.
 
-A refusal exits non-zero, so a script cannot mistake "I left your binary alone"
-for "you are up to date". That also means the `update && login` chain above stops
-at `update` on a source build; run the two separately, or pass `--force`, if you
-are deliberately replacing one.
+Being already on the latest release exits `0` -- that is success, not a refusal.
+The other three (downgrade, unrankable, source build) exit non-zero, so a script
+cannot mistake "I left your binary alone" for "you are up to date", and each
+prints its reason on stderr. That also means the `update && login` chain above
+stops at `update` in those three cases; run the two separately, or pass `--force`,
+if you are deliberately replacing the binary.
+
+A refused source build is the one case that does not re-register hooks or rewrite
+the skill files: those are written from the binary that is running, and a build
+from a checkout is usually not the one you installed. The hook script itself is
+still synced, as it is by every command -- see above. Run `agent-factory install`
+to adopt a build deliberately.
 
 #### macOS reports `Killed: 9` after updating
 

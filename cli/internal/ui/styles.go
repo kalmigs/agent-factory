@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -37,6 +38,13 @@ func Success(msg string) {
 
 func Warn(msg string) {
 	fmt.Printf("  %s %s\n", WarnStyle.Render("!"), msg)
+}
+
+// WarnErr writes a warning to stderr instead of stdout. A diagnostic that comes
+// with a non-zero exit belongs there: a CI step that pipes stdout away and only
+// surfaces stderr on failure would otherwise get the exit code and no reason.
+func WarnErr(msg string) {
+	fmt.Fprintf(os.Stderr, "  %s %s\n", WarnStyle.Render("!"), msg)
 }
 
 func Error(msg string) {

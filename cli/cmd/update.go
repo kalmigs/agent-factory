@@ -44,9 +44,10 @@ func init() {
 	updateCmd.Flags().BoolVarP(&forceUpdate, "force", "f", false,
 		"Replace this binary with the latest release even if that is a downgrade or a source build")
 	// Every failure here is already reported through ui, so Cobra printing the
-	// error itself and dumping usage under it is noise. Execute() still prints
-	// what it gets back, which is why it skips errUpdateDeclined by name.
-	updateCmd.SilenceUsage = true
+	// error itself would duplicate it. Execute() still prints what it gets back,
+	// which is why it skips errUpdateDeclined by name. Usage is silenced inside
+	// RunE rather than here: a mistyped flag fails before RunE runs, and that is
+	// the one case where the flag list is what the reader needs.
 	updateCmd.SilenceErrors = true
 }
 
@@ -103,6 +104,10 @@ func planUpdate(current, latest string, force bool) (updateAction, string) {
 }
 
 func runUpdate(cmd *cobra.Command, args []string) error {
+	// Flags parsed, so anything that fails from here is a runtime problem already
+	// reported through ui, not something the usage text would help with.
+	cmd.SilenceUsage = true
+
 	ui.PrintBanner()
 
 	// Fetch latest release tag
@@ -131,20 +136,40 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  Latest version: %s\n", ui.CyanStyle.Render(release.TagName))
 	fmt.Println()
 
-	// Declining is a result, not a failure: the command checked, decided and said
-	// so, which is why this returns nil rather than a non-zero exit.
 	if action, message := planUpdate(version, release.TagName, forceUpdate); action != updateProceed {
+		// Being on the latest release is success and stays on stdout at exit 0; a
+		// refusal is a diagnostic that comes with a non-zero exit, so it goes to
+		// stderr where a CI step that only surfaces stderr on failure will see it.
 		if action == updateSkip {
 			ui.Success(message)
 		} else {
-			ui.Warn(message)
+			ui.WarnErr(message)
 		}
-		// The binary stays as it is, but the assets on disk should still match the
-		// binary that is running. Re-downloading was how a clobbered settings.json
-		// entry or a deleted skill file got repaired, because the fresh binary ran
-		// _refresh-assets afterwards; the download is the part worth skipping, not
-		// the repair. The root's hook is not a substitute — it only rewrites the
-		// script, and never touches registration, skills or identity.
+
+		// refreshInstalledAssets writes the *running* binary's embedded copies, so
+		// it repairs only when the binary running is the installed one. A source
+		// build almost never is: a contributor checking for a release from a
+		// feature branch would otherwise overwrite the installed hook script and
+		// skill files with in-progress ones, while being told the binary itself was
+		// left alone. `install` is the command that adopts a build deliberately.
+		//
+		// This covers registration, skills and identity only. The hook *script* is
+		// synced by the root's PersistentPreRun before any command body runs, from
+		// any binary — that is the privacy repair path and predates this guard, so
+		// the message below must not claim the script was left alone.
+		if version == devVersion {
+			ui.WarnErr("Hook registration and skill files were left as they are; " +
+				"run 'agent-factory install' to adopt this build.")
+			fmt.Println()
+			return errUpdateDeclined
+		}
+
+		// Otherwise the assets should match the binary that is running. Downloading
+		// an identical release was how a clobbered settings.json entry or a deleted
+		// skill file got repaired, because the fresh binary ran _refresh-assets
+		// afterwards; the download is the part worth skipping, not the repair. The
+		// root's hook is no substitute — it only rewrites the script, and never
+		// touches registration, skills or identity.
 		installed := len(hooks.InstalledTargets()) > 0
 		if err := refreshInstalledAssets(); err != nil {
 			ui.Warn("Installed hooks could not be refreshed: " + err.Error())
