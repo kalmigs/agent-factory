@@ -163,6 +163,10 @@ Claude/Codex Hooks  ──curl POST──>  Fastify Server  ──WebSocket─�
 
 ### Upgrading from an older install
 
+`agent-factory --version` (or `agent-factory version`) prints the release tag the
+binary was built from, which is how you tell whether any of the below applies to
+you. A binary built from a source checkout reports `dev`.
+
 `agent-factory update` replaces the binary from inside the running process, so an
 upgrade is carried out by the *old* code. Upgrading from a version before the
 allowlist therefore leaves the previous hook script in place, still forwarding raw
@@ -174,6 +178,10 @@ agent-factory update && agent-factory login
 ```
 
 The first command run by the new binary repairs the installed hook. `login` also creates the persistent installation identity and opens the browser handoff. Later upgrades refresh hooks directly from the newly installed binary.
+
+`update` stops rather than act when it would change nothing (you are already on
+the latest release), walk you backwards (the latest release is older than what
+you have), or discard a source build. Pass `--force` to override any of those.
 
 #### macOS reports `Killed: 9` after updating
 

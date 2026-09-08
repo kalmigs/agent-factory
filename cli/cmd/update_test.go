@@ -93,6 +93,70 @@ func TestReplaceBinaryPreservesSymlinkChain(t *testing.T) {
 	}
 }
 
+func TestPlanUpdate(t *testing.T) {
+	cases := []struct {
+		name            string
+		current, latest string
+		force           bool
+		want            updateAction
+		wantMessage     bool
+	}{
+		{
+			name:    "a newer release is installed",
+			current: "v0.21.1", latest: "v0.22.1",
+			want: updateProceed,
+		},
+		{
+			name:    "already on the latest release",
+			current: "v0.22.1", latest: "v0.22.1",
+			want: updateSkip, wantMessage: true,
+		},
+		{
+			// The window this command was built for: between 2026-04 and 2026-09
+			// the latest release was five months behind main, and running update
+			// on a current binary would have walked it backwards.
+			name:    "the latest release is older than what is installed",
+			current: "v0.22.1", latest: "v0.21.1",
+			want: updateBlock, wantMessage: true,
+		},
+		{
+			name:    "a downgrade is allowed once asked for",
+			current: "v0.22.1", latest: "v0.21.1", force: true,
+			want: updateProceed,
+		},
+		{
+			// A source build may carry local changes, or fixes no release has.
+			name:    "a source build is not replaced by default",
+			current: devVersion, latest: "v0.22.1",
+			want: updateBlock, wantMessage: true,
+		},
+		{
+			name:    "a source build is replaced once asked for",
+			current: devVersion, latest: "v0.22.1", force: true,
+			want: updateProceed,
+		},
+		{
+			// Unrankable is not a reason to strand someone on an old binary;
+			// proceed, but say the comparison did not happen.
+			name:    "tags that cannot be ranked still update, with a warning",
+			current: "v1.0.0-rc1", latest: "v1.0.0-rc2",
+			want: updateProceed, wantMessage: true,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			action, message := planUpdate(c.current, c.latest, c.force)
+			if action != c.want {
+				t.Errorf("action = %d, want %d", action, c.want)
+			}
+			if (message != "") != c.wantMessage {
+				t.Errorf("message = %q, want a message: %v", message, c.wantMessage)
+			}
+		})
+	}
+}
+
 func assertNoStagedBinary(t *testing.T, dir string) {
 	t.Helper()
 	matches, err := filepath.Glob(filepath.Join(dir, ".agent-factory-update-*"))

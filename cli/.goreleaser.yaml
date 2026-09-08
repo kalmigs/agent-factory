@@ -15,6 +15,10 @@ builds:
       - arm64
     ldflags:
       - -s -w
+      # Without this a release binary reports "dev" and is indistinguishable
+      # from a source build. .Tag, not .Version, so the string matches the
+      # tag_name `update` reads back from the GitHub releases API.
+      - -X github.com/wolzey/agent-factory/cli/cmd.version={{ .Tag }}
 
 archives:
   - formats: [tar.gz]

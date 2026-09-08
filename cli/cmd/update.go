@@ -29,8 +29,56 @@ var updateCmd = &cobra.Command{
 	RunE:  runUpdate,
 }
 
+var forceUpdate bool
+
+func init() {
+	updateCmd.Flags().BoolVarP(&forceUpdate, "force", "f", false,
+		"Replace this binary with the latest release even if that is a downgrade or a source build")
+}
+
 type ghRelease struct {
 	TagName string `json:"tag_name"`
+}
+
+// updateAction is what to do with the tag GitHub reports as latest.
+type updateAction int
+
+const (
+	updateProceed updateAction = iota // download and replace
+	updateSkip                        // nothing to do; not an error
+	updateBlock                       // replacing would lose or downgrade something
+)
+
+// planUpdate decides whether replacing this binary with latest is the right
+// move, and returns the line to print about it. It reaches nothing, so the
+// decision is testable without a release on GitHub.
+func planUpdate(current, latest string, force bool) (updateAction, string) {
+	if force {
+		return updateProceed, ""
+	}
+
+	// A source build's contents are unknown to us: it may carry local changes, or
+	// fixes that no release has yet. Overwriting it is a decision, not a default.
+	if current == devVersion {
+		return updateBlock, fmt.Sprintf(
+			"This binary was built from source, so it has no release tag to compare against %s.\n"+
+				"  Re-run with --force to replace it anyway.", latest)
+	}
+
+	cmp, ok := compareVersions(current, latest)
+	if !ok {
+		return updateProceed, fmt.Sprintf("Cannot rank %s against %s; updating anyway.", current, latest)
+	}
+	switch {
+	case cmp == 0:
+		return updateSkip, fmt.Sprintf("Already on %s — nothing to do.", latest)
+	case cmp > 0:
+		return updateBlock, fmt.Sprintf(
+			"Installed %s is newer than the latest release %s; refusing to downgrade.\n"+
+				"  Re-run with --force if that is what you want.", current, latest)
+	default:
+		return updateProceed, ""
+	}
 }
 
 func runUpdate(cmd *cobra.Command, args []string) error {
@@ -58,7 +106,27 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	fmt.Printf("  Installed:      %s\n", ui.CyanStyle.Render(version))
 	fmt.Printf("  Latest version: %s\n", ui.CyanStyle.Render(release.TagName))
+	fmt.Println()
+
+	// Declining is a result, not a failure: the command checked, decided and said
+	// so, which is why these return nil rather than a non-zero exit.
+	switch action, message := planUpdate(version, release.TagName, forceUpdate); action {
+	case updateSkip:
+		ui.Success(message)
+		fmt.Println()
+		return nil
+	case updateBlock:
+		ui.Warn(message)
+		fmt.Println()
+		return nil
+	default:
+		if message != "" {
+			ui.Warn(message)
+			fmt.Println()
+		}
+	}
 
 	// Determine platform asset name
 	goos := runtime.GOOS

@@ -9,9 +9,10 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "agent-factory",
-	Short: "Agent Factory CLI - install/uninstall Claude/Codex visualization hooks",
-	Long:  "Install and manage Agent Factory hooks for Claude Code and Codex.\nYour coding sessions will appear as pixel art avatars in a retro arcade.",
+	Use:     "agent-factory",
+	Short:   "Agent Factory CLI - install/uninstall Claude/Codex visualization hooks",
+	Long:    "Install and manage Agent Factory hooks for Claude Code and Codex.\nYour coding sessions will appear as pixel art avatars in a retro arcade.",
+	Version: version,
 	// `update` rewrites the binary from inside the old process, so the old code
 	// finishes that run and a changed hook script is never written by the upgrade
 	// delivering it. Repair it here instead, on the first run of the new binary,
@@ -38,6 +39,11 @@ func Execute() {
 }
 
 func init() {
+	// Keep `--version` and `version` printing the same string; a release that
+	// reports itself two ways is the confusion this is meant to end.
+	rootCmd.SetVersionTemplate("agent-factory {{.Version}}\n")
+
+	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(uninstallCmd)
 	rootCmd.AddCommand(avatarCmd)
