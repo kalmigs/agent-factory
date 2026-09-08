@@ -23,6 +23,14 @@ func TestCompareVersionsRanksReleases(t *testing.T) {
 		{"v1.0.0", "v1.0.0-rc1", 1},
 		{"v1.0.0-rc1", "v1.0.0-rc1", 0},
 		{"v1.0.0+build.5", "v1.0.0", 0}, // build metadata does not rank
+		// Pre-releases rank against each other, so rc1 → rc2 is an ordinary
+		// upgrade rather than something the downgrade guard has to refuse.
+		{"v1.0.0-rc1", "v1.0.0-rc2", -1},
+		{"v1.0.0-rc2", "v1.0.0-rc1", 1},
+		{"v1.0.0-alpha", "v1.0.0-beta", -1},    // ASCII, per semver
+		{"v1.0.0-rc.2", "v1.0.0-rc.10", -1},    // dotted fields compare numerically
+		{"v1.0.0-1", "v1.0.0-alpha", -1},       // numeric ranks below alphanumeric
+		{"v1.0.0-alpha", "v1.0.0-alpha.1", -1}, // fewer identifiers ranks lower
 	}
 
 	for _, c := range cases {
@@ -43,8 +51,11 @@ func TestCompareVersionsDeclinesWhatItCannotRank(t *testing.T) {
 	cases := [][2]string{
 		{devVersion, "v0.22.1"},
 		{"v0.22.1", devVersion},
+		// Two identical unparseable strings are still unrankable. Without this,
+		// a caller that compared before checking for a source build would be told
+		// "same release" and skip an update it should have thought about.
+		{devVersion, devVersion},
 		{"", "v0.22.1"},
-		{"v1.0.0-rc1", "v1.0.0-rc2"}, // same release, unrankable pre-releases
 		{"v1.2.x", "v1.2.3"},
 		{"nightly", "v1.0.0"},
 	}
@@ -110,8 +121,11 @@ func TestReleaseInjectsThisPackage(t *testing.T) {
 	if ldflag == "" {
 		t.Fatal("no live ldflags entry injects cmd.version; released binaries would report \"dev\"")
 	}
-	if !strings.HasPrefix(ldflag, "- -X ") {
-		t.Errorf("ldflag entry is %q, want a plain `- -X …` list item", ldflag)
+	// A quoted entry (- "-X …") is valid YAML for the same flag, so unwrap before
+	// checking rather than failing a config that would actually work.
+	entry := strings.Trim(strings.TrimPrefix(ldflag, "- "), `"'`)
+	if !strings.HasPrefix(entry, "-X ") {
+		t.Errorf("ldflag entry is %q, want an `-X …` list item", ldflag)
 	}
 	// One build, one ldflags block: a second of either could ship an artifact with
 	// no version injected, which this line-scan would not otherwise notice.

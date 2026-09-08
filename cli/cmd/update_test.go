@@ -136,15 +136,27 @@ func TestPlanUpdate(t *testing.T) {
 			want: updateProceed,
 		},
 		{
-			// "Not provably newer" is not "newer". Two pre-releases of one version
-			// are the reachable case, and rc2 → rc1 is the downgrade to avoid.
-			name:    "tags that cannot be ranked are not assumed to be an upgrade",
+			// Pre-releases rank, so this is a downgrade like any other rather than
+			// an unknown — and the next case is the upgrade it must not block.
+			name:    "an earlier pre-release of the same version is a downgrade",
 			current: "v1.0.0-rc2", latest: "v1.0.0-rc1",
 			want: updateBlock, wantMessage: true,
 		},
 		{
-			name:    "an unrankable pair still updates once asked for",
-			current: "v1.0.0-rc2", latest: "v1.0.0-rc1", force: true,
+			name:    "a later pre-release of the same version is an ordinary upgrade",
+			current: "v1.0.0-rc1", latest: "v1.0.0-rc2",
+			want: updateProceed,
+		},
+		{
+			// "Not provably newer" is not "newer": a tag this cannot parse could be
+			// anything, so it is refused rather than assumed to be an upgrade.
+			name:    "a tag that cannot be ranked at all is not assumed to be an upgrade",
+			current: "v1.0.0", latest: "nightly",
+			want: updateBlock, wantMessage: true,
+		},
+		{
+			name:    "an unrankable tag still installs once asked for",
+			current: "v1.0.0", latest: "nightly", force: true,
 			want: updateProceed,
 		},
 	}

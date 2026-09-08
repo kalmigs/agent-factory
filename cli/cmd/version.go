@@ -39,15 +39,12 @@ var versionCmd = &cobra.Command{
 // precedes b, zero when they are the same release, and a positive number when a
 // follows b. Tags may carry a leading "v" and a pre-release suffix.
 //
-// ok is false when the two cannot be ranked honestly: a non-numeric field, or
-// equal numbers with differing pre-release suffixes ("v1.0.0-rc1" against
-// "v1.0.0-rc2"). Callers should treat that as "unknown", not as "equal" — the
-// whole point of this file is that the CLI stops guessing which build it is.
+// ok is false when either tag has a field that is not a number — "dev" and any
+// other free-form string. Callers should treat that as "unknown", not as "equal":
+// the whole point of this file is that the CLI stops guessing which build it is.
+// Note there is no shortcut for a == b, so two identical unparseable strings are
+// still reported as unrankable rather than as the same release.
 func compareVersions(a, b string) (int, bool) {
-	if a == b {
-		return 0, true
-	}
-
 	aNums, aPre, aOK := splitVersion(a)
 	bNums, bPre, bOK := splitVersion(b)
 	if !aOK || !bOK {
@@ -68,18 +65,49 @@ func compareVersions(a, b string) (int, bool) {
 		}
 	}
 
-	// Same numbers. A pre-release precedes the release it leads to; two different
-	// pre-releases of the same version are not worth ranking here.
+	return comparePrerelease(aPre, bPre), true
+}
+
+// comparePrerelease orders the suffix left over after the numbers, by semver's
+// rules: a release outranks any pre-release of the same version, identifiers are
+// compared field by field — numeric ones numerically, the rest by ASCII, and a
+// numeric identifier below an alphanumeric one — and when every shared field
+// matches, the tag with more of them wins.
+//
+// Every pair has an answer here, which is the point: rc1 → rc2 is an ordinary
+// upgrade, and refusing it because the suffix "cannot be ranked" would make the
+// downgrade guard cost more than it saves.
+func comparePrerelease(a, b string) int {
 	switch {
-	case aPre == bPre:
-		return 0, true
-	case aPre == "":
-		return 1, true
-	case bPre == "":
-		return -1, true
-	default:
-		return 0, false
+	case a == b:
+		return 0
+	case a == "":
+		return 1 // a release outranks a pre-release of the same version
+	case b == "":
+		return -1
 	}
+
+	aFields, bFields := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(aFields) && i < len(bFields); i++ {
+		if aFields[i] == bFields[i] {
+			continue
+		}
+		an, aErr := strconv.Atoi(aFields[i])
+		bn, bErr := strconv.Atoi(bFields[i])
+		switch {
+		case aErr == nil && bErr == nil:
+			if an != bn {
+				return an - bn
+			}
+		case aErr == nil:
+			return -1
+		case bErr == nil:
+			return 1
+		default:
+			return strings.Compare(aFields[i], bFields[i])
+		}
+	}
+	return len(aFields) - len(bFields)
 }
 
 // splitVersion separates "v1.2.3-rc1" into its numeric fields and the

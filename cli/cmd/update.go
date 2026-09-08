@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/wolzey/agent-factory/cli/internal/hooks"
 	"github.com/wolzey/agent-factory/cli/internal/ui"
 )
 
@@ -31,9 +33,20 @@ var updateCmd = &cobra.Command{
 
 var forceUpdate bool
 
+// errUpdateDeclined gives a refusal a non-zero exit. A provisioning script that
+// runs `update` on a source-built or unrankable binary would otherwise read the
+// zero from a refusal as "you are current" and ship a stale binary — before this
+// command learned to decline, that invocation always upgraded. `updateSkip` stays
+// at zero: already being on the latest release is success, not a refusal.
+var errUpdateDeclined = errors.New("update declined")
+
 func init() {
 	updateCmd.Flags().BoolVarP(&forceUpdate, "force", "f", false,
 		"Replace this binary with the latest release even if that is a downgrade or a source build")
+	// Every failure here is already reported through ui; without these, Cobra
+	// prints the error a second time and dumps the usage text under it.
+	updateCmd.SilenceUsage = true
+	updateCmd.SilenceErrors = true
 }
 
 type ghRelease struct {
@@ -131,13 +144,19 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		// _refresh-assets afterwards; the download is the part worth skipping, not
 		// the repair. The root's hook is not a substitute — it only rewrites the
 		// script, and never touches registration, skills or identity.
+		installed := len(hooks.InstalledTargets()) > 0
 		if err := refreshInstalledAssets(); err != nil {
 			ui.Warn("Installed hooks could not be refreshed: " + err.Error())
 			ui.Info("Run 'agent-factory install' to refresh hooks manually.")
-		} else {
+		} else if installed {
+			// Nothing is installed for someone who has never run `install`, and
+			// claiming a refresh there would be a plain untruth.
 			ui.Success("Installed hooks and identity refreshed")
 		}
 		fmt.Println()
+		if action == updateBlock {
+			return errUpdateDeclined
+		}
 		return nil
 	}
 
