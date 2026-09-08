@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -36,18 +35,19 @@ var forceUpdate bool
 // errUpdateDeclined gives a refusal a non-zero exit. A provisioning script that
 // runs `update` on a source-built or unrankable binary would otherwise read the
 // zero from a refusal as "you are current" and ship a stale binary — before this
-// command learned to decline, that invocation always upgraded. `updateSkip` stays
-// at zero: already being on the latest release is success, not a refusal.
-var errUpdateDeclined = errors.New("update declined")
+// command learned to decline, that invocation always upgraded. Being already on
+// the latest release is success rather than a refusal, and still exits zero —
+// unless the repair below fails, which is the only work that path does.
+var errUpdateDeclined = fmt.Errorf("update declined: %w", errReported)
 
 func init() {
 	updateCmd.Flags().BoolVarP(&forceUpdate, "force", "f", false,
 		"Replace this binary with the latest release even if that is a downgrade or a source build")
 	// Every failure here is already reported through ui, so Cobra printing the
 	// error itself would duplicate it. Execute() still prints what it gets back,
-	// which is why it skips errUpdateDeclined by name. Usage is silenced inside
-	// RunE rather than here: a mistyped flag fails before RunE runs, and that is
-	// the one case where the flag list is what the reader needs.
+	// which is why the errors it has already shown wrap errReported. Usage is
+	// silenced inside RunE rather than here: a mistyped flag fails before RunE
+	// runs, and that is the one case where the flag list is what the reader needs.
 	updateCmd.SilenceErrors = true
 }
 
@@ -81,10 +81,10 @@ func planUpdate(current, latest string, force bool) (updateAction, string) {
 	}
 
 	// Proceeding on an unrankable pair would reopen the hole this command exists to
-	// close: "not provably newer" is not "newer". Two pre-releases of one version
-	// are the reachable case — .goreleaser.yaml sets no `release.prerelease`, and
-	// GoReleaser defaults it to false, so an rc tag publishes as a normal release
-	// that `releases/latest` will hand back.
+	// close: "not provably newer" is not "newer". Since comparePrerelease ranks
+	// pre-releases, what reaches here is a tag that is not semver at all — an empty
+	// or malformed `tag_name`, or a scheme this does not parse. Refusing beats
+	// guessing, and --force is one flag away.
 	cmp, ok := compareVersions(current, latest)
 	if !ok {
 		return updateBlock, fmt.Sprintf(
@@ -158,8 +158,11 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		// any binary — that is the privacy repair path and predates this guard, so
 		// the message below must not claim the script was left alone.
 		if version == devVersion {
-			ui.WarnErr("Hook registration and skill files were left as they are; " +
-				"run 'agent-factory install' to adopt this build.")
+			// Only worth saying to someone who has something installed to protect.
+			if len(hooks.InstalledTargets()) > 0 {
+				ui.WarnErr("Hook registration and skill files were left as they are; " +
+					"run 'agent-factory install' to adopt this build.")
+			}
 			fmt.Println()
 			return errUpdateDeclined
 		}
@@ -172,12 +175,19 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		// touches registration, skills or identity.
 		installed := len(hooks.InstalledTargets()) > 0
 		if err := refreshInstalledAssets(); err != nil {
-			ui.Warn("Installed hooks could not be refreshed: " + err.Error())
-			ui.Info("Run 'agent-factory install' to refresh hooks manually.")
-		} else if installed {
+			// On the skip path this repair is the only work the command does, and
+			// the README sells `update` for exactly it. Exiting zero here would
+			// hand a provisioning script a success it did not get.
+			ui.WarnErr("Installed hooks could not be refreshed: " + err.Error() +
+				"\n  Run 'agent-factory install' to refresh them manually.")
+			fmt.Println()
+			return fmt.Errorf("refresh installed assets: %w", errReported)
+		}
+		if installed {
 			// Nothing is installed for someone who has never run `install`, and
 			// claiming a refresh there would be a plain untruth.
-			ui.Success("Installed hooks and identity refreshed")
+			// Not "and identity": that half only happens when a config exists.
+			ui.Success("Installed hooks refreshed")
 		}
 		fmt.Println()
 		if action == updateBlock {

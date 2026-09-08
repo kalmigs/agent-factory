@@ -32,12 +32,17 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+// errReported marks an error whose explanation has already reached the user, so
+// Execute() below contributes the exit status and nothing else. It lives here
+// because Execute() is what honours it; commands only opt in by wrapping it.
+var errReported = errors.New("already reported")
+
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		// A declined update has already explained itself in full; printing the
-		// sentinel here would add a bare, context-free line under that. The exit
-		// status is the only part of it still worth delivering.
-		if !errors.Is(err, errUpdateDeclined) {
+		// Some errors have already explained themselves in full; printing them here
+		// would add a bare, context-free line under that. The exit status is the
+		// only part of those still worth delivering.
+		if !errors.Is(err, errReported) {
 			fmt.Fprintln(os.Stderr, err)
 		}
 		os.Exit(1)

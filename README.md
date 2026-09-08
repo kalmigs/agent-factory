@@ -177,11 +177,12 @@ script and says so. To close that window immediately:
 agent-factory update && agent-factory login
 ```
 
-The first command run by the new binary repairs the installed hook -- **except
-`version` and `--version`, which report the binary and write nothing**, so use
-any other command (or `login`, above) to close the window. `login` also creates
-the persistent installation identity and opens the browser handoff. Later
-upgrades refresh hooks directly from the newly installed binary.
+Most commands repair the installed hook on the way through, but five do not:
+`version`, `--version`, `--help`, an unknown subcommand, and bare
+`agent-factory` all leave the old script in place. Run `login` (above) or any
+other subcommand to close the window. `login` also creates the persistent
+installation identity and opens the browser handoff. Later upgrades refresh
+hooks directly from the newly installed binary.
 
 `update` replaces the binary only when that is an upgrade. It declines when you
 are already on the latest release, when the latest release is older than the one
@@ -191,7 +192,8 @@ installed hook script, the `settings.json` hook entries and the Claude skill
 files, so they match the binary you are actually running -- that repair is why
 `update` is worth running even when there is nothing to download.
 
-Being already on the latest release exits `0` -- that is success, not a refusal.
+Being already on the latest release exits `0` -- that is success, not a refusal --
+unless the hook refresh below fails, which is the only work that path does.
 The other three (downgrade, unrankable, source build) exit non-zero, so a script
 cannot mistake "I left your binary alone" for "you are up to date", and each
 prints its reason on stderr. That also means the `update && login` chain above
@@ -360,6 +362,7 @@ After upgrading, start a new agent session to establish ownership. Sessions emit
 | `agent-factory uninstall` | Remove hooks/config while preserving installation identity |
 | `agent-factory uninstall --purge-identity` | Also permanently reset the installation identity |
 | `agent-factory update` | Update the CLI and refresh installed hooks |
+| `agent-factory version` | Print the release tag this binary was built from (`--version` is the same) |
 | `agent-factory login` | Securely connect this installation to the default browser |
 | `agent-factory connect` | Show a single-use browser login QR code |
 | `agent-factory token` | Deprecated alias for `agent-factory login` |

@@ -40,11 +40,18 @@ func Warn(msg string) {
 	fmt.Printf("  %s %s\n", WarnStyle.Render("!"), msg)
 }
 
+// stderrWarnStyle colours for stderr specifically. The package-level styles are
+// built from lipgloss's default renderer, which decides whether to emit ANSI by
+// looking at *stdout* -- so styling stderr with them puts escape codes into
+// `2>log` whenever stdout happens to be a terminal, and strips them from what the
+// user sees under `>out`.
+var stderrWarnStyle = lipgloss.NewRenderer(os.Stderr).NewStyle().Foreground(lipgloss.Color("#ffd43b"))
+
 // WarnErr writes a warning to stderr instead of stdout. A diagnostic that comes
 // with a non-zero exit belongs there: a CI step that pipes stdout away and only
 // surfaces stderr on failure would otherwise get the exit code and no reason.
 func WarnErr(msg string) {
-	fmt.Fprintf(os.Stderr, "  %s %s\n", WarnStyle.Render("!"), msg)
+	fmt.Fprintf(os.Stderr, "  %s %s\n", stderrWarnStyle.Render("!"), msg)
 }
 
 func Error(msg string) {

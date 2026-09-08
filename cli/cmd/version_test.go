@@ -1,9 +1,14 @@
 package cmd
 
 import (
+	"bytes"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/wolzey/agent-factory/cli/internal/hooks"
 )
 
 func TestCompareVersionsRanksReleases(t *testing.T) {
@@ -146,6 +151,55 @@ func TestReleaseInjectsThisPackage(t *testing.T) {
 	// `update` compares against.
 	if !strings.Contains(ldflag, "{{ .Tag }}") {
 		t.Errorf("ldflag is %q, want the injected value to be {{ .Tag }}", ldflag)
+	}
+}
+
+// TestVersionCommandWritesNothing pins the contract the README states: asking the
+// binary what it is does not touch the installed hook script. It rests on Cobra
+// running only the first persistent hook it finds walking up from the command,
+// which the empty PersistentPreRun on versionCmd relies on — a default that could
+// change under us without any other test noticing.
+func TestVersionCommandWritesNothing(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	path := filepath.Join(home, ".config", "agent-factory", "hooks", "agent-factory-hook.sh")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stale := []byte("#!/bin/sh\n# a stale script the sync would replace\n")
+	if err := os.WriteFile(path, stale, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	rootCmd.SetOut(io.Discard)
+	rootCmd.SetErr(io.Discard)
+	t.Cleanup(func() { rootCmd.SetArgs(nil); rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
+
+	// The subcommand relies on the empty PersistentPreRun; the flag relies on
+	// Cobra returning before hooks run. Different mechanisms, same promise.
+	for _, args := range [][]string{{"version"}, {"--version"}} {
+		rootCmd.SetArgs(args)
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		after, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(after, stale) {
+			t.Errorf("%v rewrote the installed hook script; the README promises it writes nothing", args)
+		}
+	}
+
+	// Positive control: without it this test would still pass if the sync stopped
+	// working altogether, which is the opposite failure and just as bad.
+	rewrote, err := hooks.SyncHookScript()
+	if err != nil {
+		t.Fatalf("sync hook script: %v", err)
+	}
+	if !rewrote {
+		t.Error("SyncHookScript left a stale script in place, so the check above proves nothing")
 	}
 }
 
