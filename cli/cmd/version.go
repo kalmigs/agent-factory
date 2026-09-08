@@ -14,7 +14,9 @@ import (
 const devVersion = "dev"
 
 // version is the release tag this binary was built from. GoReleaser overwrites
-// it through -ldflags "-X …/cli/cmd.version={{.Version}}"; see .goreleaser.yaml.
+// it through -ldflags "-X …/cli/cmd.version={{ .Tag }}"; see .goreleaser.yaml,
+// which explains why .Tag and not .Version. TestReleaseInjectsThisPackage keeps
+// the two in step.
 var version = devVersion
 
 // versionCmd exists because `agent-factory version` is what people type, while

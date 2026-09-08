@@ -115,6 +115,17 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	switch action, message := planUpdate(version, release.TagName, forceUpdate); action {
 	case updateSkip:
 		ui.Success(message)
+		// Re-downloading an identical release was how a clobbered settings.json
+		// entry or a deleted skill file got repaired, because the fresh binary ran
+		// _refresh-assets afterwards. The download is the part worth skipping; this
+		// binary already carries the assets that release would install, so do the
+		// repair here rather than lose it. The root's hook only rewrites the script.
+		if err := refreshInstalledAssets(); err != nil {
+			ui.Warn("Installed hooks could not be refreshed: " + err.Error())
+			ui.Info("Run 'agent-factory install' to refresh hooks manually.")
+		} else {
+			ui.Success("Installed hooks and identity refreshed")
+		}
 		fmt.Println()
 		return nil
 	case updateBlock:

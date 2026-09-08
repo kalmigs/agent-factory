@@ -1,6 +1,10 @@
 package cmd
 
-import "testing"
+import (
+	"os"
+	"strings"
+	"testing"
+)
 
 func TestCompareVersionsRanksReleases(t *testing.T) {
 	cases := []struct {
@@ -61,6 +65,53 @@ func TestVersionDefaultsToDevInASourceBuild(t *testing.T) {
 	if _, _, ok := splitVersion(devVersion); ok {
 		t.Fatal("the dev sentinel parses as a release tag, so it can be ranked against one")
 	}
+}
+
+// TestReleaseInjectsThisPackage guards the one failure this whole file exists to
+// prevent, and the one nothing else would catch: `go build` silently ignores an
+// -X whose import path does not resolve. Rename the module, move this package or
+// mistype the path and releases go back to reporting "dev" — with a green build,
+// a green test run, and no sign of it until someone downloads a binary.
+func TestReleaseInjectsThisPackage(t *testing.T) {
+	module := modulePath(t)
+	config, err := os.ReadFile("../.goreleaser.yaml")
+	if err != nil {
+		t.Fatalf("read goreleaser config: %v", err)
+	}
+
+	var ldflag string
+	for _, line := range strings.Split(string(config), "\n") {
+		if strings.Contains(line, "cmd.version=") {
+			ldflag = strings.TrimSpace(line)
+			break
+		}
+	}
+	if ldflag == "" {
+		t.Fatal("goreleaser no longer injects cmd.version; released binaries would report \"dev\"")
+	}
+	if want := "-X " + module + "/cmd.version="; !strings.Contains(ldflag, want) {
+		t.Errorf("ldflag is %q, want it to target %q", ldflag, want)
+	}
+	// .Version drops the leading v, which would no longer match the tag_name
+	// `update` compares against.
+	if !strings.Contains(ldflag, "{{ .Tag }}") {
+		t.Errorf("ldflag is %q, want the injected value to be {{ .Tag }}", ldflag)
+	}
+}
+
+func modulePath(t *testing.T) string {
+	t.Helper()
+	gomod, err := os.ReadFile("../go.mod")
+	if err != nil {
+		t.Fatalf("read go.mod: %v", err)
+	}
+	for _, line := range strings.Split(string(gomod), "\n") {
+		if path, found := strings.CutPrefix(line, "module "); found {
+			return strings.TrimSpace(path)
+		}
+	}
+	t.Fatal("go.mod declares no module path")
+	return ""
 }
 
 func sign(n int) int {
