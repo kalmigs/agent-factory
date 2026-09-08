@@ -42,8 +42,12 @@ func HookScriptMatchesEmbedded() bool {
 //
 // `update` replaces the binary from inside the *old* process, so the old code is
 // what finishes that run -- a fix to the hook script would not be written by the
-// upgrade that delivers it. Every command therefore repairs the script on the
-// next run of the new binary instead of relying on the upgrade itself.
+// upgrade that delivers it. Commands therefore repair the script on the next run
+// of the new binary instead of relying on the upgrade itself.
+//
+// `version` and `--version` are the exception: they answer a question about the
+// binary and write nothing. Cobra returns on the `--version` flag before any hook
+// runs, so the two spellings could not behave alike otherwise.
 func SyncHookScript() (bool, error) {
 	if _, err := os.Stat(HookScriptPath()); err != nil {
 		if os.IsNotExist(err) {

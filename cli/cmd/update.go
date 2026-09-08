@@ -43,8 +43,9 @@ var errUpdateDeclined = errors.New("update declined")
 func init() {
 	updateCmd.Flags().BoolVarP(&forceUpdate, "force", "f", false,
 		"Replace this binary with the latest release even if that is a downgrade or a source build")
-	// Every failure here is already reported through ui; without these, Cobra
-	// prints the error a second time and dumps the usage text under it.
+	// Every failure here is already reported through ui, so Cobra printing the
+	// error itself and dumping usage under it is noise. Execute() still prints
+	// what it gets back, which is why it skips errUpdateDeclined by name.
 	updateCmd.SilenceUsage = true
 	updateCmd.SilenceErrors = true
 }

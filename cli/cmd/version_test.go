@@ -31,6 +31,12 @@ func TestCompareVersionsRanksReleases(t *testing.T) {
 		{"v1.0.0-rc.2", "v1.0.0-rc.10", -1},    // dotted fields compare numerically
 		{"v1.0.0-1", "v1.0.0-alpha", -1},       // numeric ranks below alphanumeric
 		{"v1.0.0-alpha", "v1.0.0-alpha.1", -1}, // fewer identifiers ranks lower
+		// Deliberate, not an oversight: "rc10" and "rc2" are single alphanumeric
+		// identifiers, so semver compares them as text and rc10 ranks lower. That
+		// makes rc9 -> rc10 read as a downgrade; -rc.10 splits the number into its
+		// own field and ranks numerically. Documented on comparePrerelease.
+		{"v1.0.0-rc10", "v1.0.0-rc2", -1},
+		{"v1.0.0-rc.9", "v1.0.0-rc.10", -1},
 	}
 
 	for _, c := range cases {

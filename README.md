@@ -177,7 +177,11 @@ script and says so. To close that window immediately:
 agent-factory update && agent-factory login
 ```
 
-The first command run by the new binary repairs the installed hook. `login` also creates the persistent installation identity and opens the browser handoff. Later upgrades refresh hooks directly from the newly installed binary.
+The first command run by the new binary repairs the installed hook -- **except
+`version` and `--version`, which report the binary and write nothing**, so use
+any other command (or `login`, above) to close the window. `login` also creates
+the persistent installation identity and opens the browser handoff. Later
+upgrades refresh hooks directly from the newly installed binary.
 
 `update` replaces the binary only when that is an upgrade. It declines when you
 are already on the latest release, when the latest release is older than the one
@@ -186,6 +190,11 @@ a source build; `--force` overrides any of those. Declining still refreshes the
 installed hook script, the `settings.json` hook entries and the Claude skill
 files, so they match the binary you are actually running -- that repair is why
 `update` is worth running even when there is nothing to download.
+
+A refusal exits non-zero, so a script cannot mistake "I left your binary alone"
+for "you are up to date". That also means the `update && login` chain above stops
+at `update` on a source build; run the two separately, or pass `--force`, if you
+are deliberately replacing one.
 
 #### macOS reports `Killed: 9` after updating
 

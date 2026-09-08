@@ -77,6 +77,13 @@ func compareVersions(a, b string) (int, bool) {
 // Every pair has an answer here, which is the point: rc1 → rc2 is an ordinary
 // upgrade, and refusing it because the suffix "cannot be ranked" would make the
 // downgrade guard cost more than it saves.
+//
+// The ASCII rule has a sharp edge semver keeps deliberately: "rc10" sorts below
+// "rc2", because they are single identifiers rather than "rc" and a number. So
+// rc9 → rc10 reads as a downgrade and is refused. Matching the spec is worth more
+// than smoothing that over with an ordering nothing else in the world uses, and
+// --force covers anyone who hits it. Tag pre-releases as -rc.10 and the number
+// becomes its own field, compared numerically.
 func comparePrerelease(a, b string) int {
 	switch {
 	case a == b:

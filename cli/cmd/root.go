@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -33,7 +34,12 @@ var rootCmd = &cobra.Command{
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		// A declined update has already explained itself in full; printing the
+		// sentinel here would add a bare, context-free line under that. The exit
+		// status is the only part of it still worth delivering.
+		if !errors.Is(err, errUpdateDeclined) {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		os.Exit(1)
 	}
 }
