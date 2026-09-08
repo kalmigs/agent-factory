@@ -42,7 +42,7 @@ var errUpdateDeclined = fmt.Errorf("update declined: %w", errReported)
 
 func init() {
 	updateCmd.Flags().BoolVarP(&forceUpdate, "force", "f", false,
-		"Replace this binary with the latest release even if that is a downgrade or a source build")
+		"Replace this binary with the latest release even if that is a downgrade, an unrankable tag, or a source build")
 	// Every failure here is already reported through ui, so Cobra printing the
 	// error itself would duplicate it. Execute() still prints what it gets back,
 	// which is why the errors it has already shown wrap errReported. Usage is
@@ -148,15 +148,15 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 
 		// refreshInstalledAssets writes the *running* binary's embedded copies, so
 		// it repairs only when the binary running is the installed one. A source
-		// build almost never is: a contributor checking for a release from a
-		// feature branch would otherwise overwrite the installed hook script and
-		// skill files with in-progress ones, while being told the binary itself was
+		// build almost never is: a contributor checking for a release from a feature
+		// branch would otherwise overwrite the installed registration, skills and
+		// identity with in-progress ones, while being told the binary itself was
 		// left alone. `install` is the command that adopts a build deliberately.
 		//
-		// This covers registration, skills and identity only. The hook *script* is
-		// synced by the root's PersistentPreRun before any command body runs, from
-		// any binary — that is the privacy repair path and predates this guard, so
-		// the message below must not claim the script was left alone.
+		// Those three are all this guard protects. The hook *script* is synced by
+		// the root's PersistentPreRun before any command body runs, from any binary
+		// — that is the privacy repair path and predates this guard, so neither the
+		// message below nor this comment may claim the script was left alone.
 		if version == devVersion {
 			// Only worth saying to someone who has something installed to protect.
 			if len(hooks.InstalledTargets()) > 0 {

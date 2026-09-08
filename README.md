@@ -203,7 +203,8 @@ if you are deliberately replacing the binary.
 A refused source build is the one case that does not re-register hooks or rewrite
 the skill files: those are written from the binary that is running, and a build
 from a checkout is usually not the one you installed. The hook script itself is
-still synced, as it is by every command -- see above. Run `agent-factory install`
+still synced, as it is by every other subcommand -- see the exceptions above.
+Run `agent-factory install`
 to adopt a build deliberately.
 
 #### macOS reports `Killed: 9` after updating

@@ -174,7 +174,14 @@ func TestVersionCommandWritesNothing(t *testing.T) {
 
 	rootCmd.SetOut(io.Discard)
 	rootCmd.SetErr(io.Discard)
-	t.Cleanup(func() { rootCmd.SetArgs(nil); rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
+	t.Cleanup(func() {
+		rootCmd.SetArgs(nil)
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		// --version latches on the shared rootCmd, so a later test executing the
+		// bare root would get the version string where it expected help.
+		_ = rootCmd.Flags().Set("version", "false")
+	})
 
 	// The subcommand relies on the empty PersistentPreRun; the flag relies on
 	// Cobra returning before hooks run. Different mechanisms, same promise.
