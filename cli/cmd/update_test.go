@@ -136,11 +136,16 @@ func TestPlanUpdate(t *testing.T) {
 			want: updateProceed,
 		},
 		{
-			// Unrankable is not a reason to strand someone on an old binary;
-			// proceed, but say the comparison did not happen.
-			name:    "tags that cannot be ranked still update, with a warning",
-			current: "v1.0.0-rc1", latest: "v1.0.0-rc2",
-			want: updateProceed, wantMessage: true,
+			// "Not provably newer" is not "newer". Two pre-releases of one version
+			// are the reachable case, and rc2 → rc1 is the downgrade to avoid.
+			name:    "tags that cannot be ranked are not assumed to be an upgrade",
+			current: "v1.0.0-rc2", latest: "v1.0.0-rc1",
+			want: updateBlock, wantMessage: true,
+		},
+		{
+			name:    "an unrankable pair still updates once asked for",
+			current: "v1.0.0-rc2", latest: "v1.0.0-rc1", force: true,
+			want: updateProceed,
 		},
 	}
 

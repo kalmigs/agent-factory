@@ -79,15 +79,45 @@ func TestReleaseInjectsThisPackage(t *testing.T) {
 		t.Fatalf("read goreleaser config: %v", err)
 	}
 
+	// Look only at live list items inside an ldflags block: a commented-out entry
+	// still contains the string but injects nothing, and that is precisely the
+	// green-build-broken-release this test is here to catch.
 	var ldflag string
+	var blocks, builds int
+	inLdflags := false
 	for _, line := range strings.Split(string(config), "\n") {
-		if strings.Contains(line, "cmd.version=") {
-			ldflag = strings.TrimSpace(line)
-			break
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- main:") {
+			builds++
+		}
+		if trimmed == "ldflags:" {
+			blocks++
+			inLdflags = true
+			continue
+		}
+		if !inLdflags || trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if !strings.HasPrefix(trimmed, "- ") {
+			inLdflags = false // the list ended; anything below is another key
+			continue
+		}
+		if ldflag == "" && strings.Contains(trimmed, "cmd.version=") {
+			ldflag = trimmed
 		}
 	}
+
 	if ldflag == "" {
-		t.Fatal("goreleaser no longer injects cmd.version; released binaries would report \"dev\"")
+		t.Fatal("no live ldflags entry injects cmd.version; released binaries would report \"dev\"")
+	}
+	if !strings.HasPrefix(ldflag, "- -X ") {
+		t.Errorf("ldflag entry is %q, want a plain `- -X …` list item", ldflag)
+	}
+	// One build, one ldflags block: a second of either could ship an artifact with
+	// no version injected, which this line-scan would not otherwise notice.
+	if builds != 1 || blocks != 1 {
+		t.Errorf("found %d build(s) and %d ldflags block(s), want 1 of each — "+
+			"give every build the cmd.version ldflag and widen this test", builds, blocks)
 	}
 	if want := "-X " + module + "/cmd.version="; !strings.Contains(ldflag, want) {
 		t.Errorf("ldflag is %q, want it to target %q", ldflag, want)

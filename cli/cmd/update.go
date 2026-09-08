@@ -65,9 +65,16 @@ func planUpdate(current, latest string, force bool) (updateAction, string) {
 				"  Re-run with --force to replace it anyway.", latest)
 	}
 
+	// Proceeding on an unrankable pair would reopen the hole this command exists to
+	// close: "not provably newer" is not "newer". Two pre-releases of one version
+	// are the reachable case — .goreleaser.yaml sets no `release.prerelease`, and
+	// GoReleaser defaults it to false, so an rc tag publishes as a normal release
+	// that `releases/latest` will hand back.
 	cmp, ok := compareVersions(current, latest)
 	if !ok {
-		return updateProceed, fmt.Sprintf("Cannot rank %s against %s; updating anyway.", current, latest)
+		return updateBlock, fmt.Sprintf(
+			"Cannot tell whether %s is newer or older than the installed %s, so this may be a downgrade.\n"+
+				"  Re-run with --force to install %s anyway.", latest, current, latest)
 	}
 	switch {
 	case cmp == 0:
@@ -111,15 +118,19 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	// Declining is a result, not a failure: the command checked, decided and said
-	// so, which is why these return nil rather than a non-zero exit.
-	switch action, message := planUpdate(version, release.TagName, forceUpdate); action {
-	case updateSkip:
-		ui.Success(message)
-		// Re-downloading an identical release was how a clobbered settings.json
+	// so, which is why this returns nil rather than a non-zero exit.
+	if action, message := planUpdate(version, release.TagName, forceUpdate); action != updateProceed {
+		if action == updateSkip {
+			ui.Success(message)
+		} else {
+			ui.Warn(message)
+		}
+		// The binary stays as it is, but the assets on disk should still match the
+		// binary that is running. Re-downloading was how a clobbered settings.json
 		// entry or a deleted skill file got repaired, because the fresh binary ran
-		// _refresh-assets afterwards. The download is the part worth skipping; this
-		// binary already carries the assets that release would install, so do the
-		// repair here rather than lose it. The root's hook only rewrites the script.
+		// _refresh-assets afterwards; the download is the part worth skipping, not
+		// the repair. The root's hook is not a substitute — it only rewrites the
+		// script, and never touches registration, skills or identity.
 		if err := refreshInstalledAssets(); err != nil {
 			ui.Warn("Installed hooks could not be refreshed: " + err.Error())
 			ui.Info("Run 'agent-factory install' to refresh hooks manually.")
@@ -128,15 +139,6 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Println()
 		return nil
-	case updateBlock:
-		ui.Warn(message)
-		fmt.Println()
-		return nil
-	default:
-		if message != "" {
-			ui.Warn(message)
-			fmt.Println()
-		}
 	}
 
 	// Determine platform asset name

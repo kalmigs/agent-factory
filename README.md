@@ -179,9 +179,13 @@ agent-factory update && agent-factory login
 
 The first command run by the new binary repairs the installed hook. `login` also creates the persistent installation identity and opens the browser handoff. Later upgrades refresh hooks directly from the newly installed binary.
 
-`update` stops rather than act when it would change nothing (you are already on
-the latest release), walk you backwards (the latest release is older than what
-you have), or discard a source build. Pass `--force` to override any of those.
+`update` replaces the binary only when that is an upgrade. It declines when you
+are already on the latest release, when the latest release is older than the one
+you have, when it cannot tell which of the two is newer, and when you are running
+a source build; `--force` overrides any of those. Declining still refreshes the
+installed hook script, the `settings.json` hook entries and the Claude skill
+files, so they match the binary you are actually running -- that repair is why
+`update` is worth running even when there is nothing to download.
 
 #### macOS reports `Killed: 9` after updating
 
